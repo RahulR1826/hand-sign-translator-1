@@ -30,6 +30,7 @@ def extract_landmarks(hand_landmarks):
 
 
 # Predict from a given frame
+# Predict from a given frame
 def predict_frame(frame):
     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(image)
@@ -37,22 +38,38 @@ def predict_frame(frame):
     prediction = "None"
     reply = None
 
+    # Define replies only for specific word signs
+    signs_with_replies = {
+        "Hello": "Hi!",
+        "Help": "Do you need help?",
+        "Yes": "Alright!",
+        "No": "No problem",
+        "Thank You":"You're Welcome",
+        "I Love You": "Love you too",
+        "OK/Okay": "Okay!",
+        "Peace/Victory": "Peace!",
+        "STR": "ATMEN",
+    }
+
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
             landmarks = extract_landmarks(hand_landmarks)
             if landmarks.shape[0] == 42:
-                prediction = model.predict([landmarks])[0]
-                reply = reply_dict.get(prediction, "...")
+                predicted_id = model.predict([landmarks])[0]
+                prediction = reply_dict.get(predicted_id, "Unknown")
+
+                reply = signs_with_replies.get(prediction, None)
 
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                cv2.putText(frame, f'{prediction} -> {reply}', (10, 60),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.putText(frame, f'{prediction}' + (f' -> {reply}' if reply else ''),
+                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
     else:
         cv2.putText(frame, "No Hand Detected", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 
     return prediction, reply
+
 
 
 # Webcam recognition
