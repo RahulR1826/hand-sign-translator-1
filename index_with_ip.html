@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sign Call Translator</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    body { background: #12131a; color: white; text-align: center; font-family: sans-serif; }
+    video { width: 45%; border: 2px solid #00c3ff; border-radius: 8px; margin: 10px; }
+    .room { margin-top: 20px; }
+    .sub { color: #00ffae; margin-top: 10px; font-size: 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>🤝 Sign Language Video Call</h1>
+
+  <div class="room">
+    <input type="text" id="room" placeholder="Enter room code" />
+    <button onclick="joinRoom()">Join Room</button>
+  </div>
+
+  <video id="local" autoplay muted playsinline></video>
+  <video id="remote" autoplay playsinline></video>
+
+  <div class="sub" id="you">🧍 You: ...</div>
+  <div class="sub" id="partner">👤 Partner: ...</div>
+
+  <script>
+    const socket = io("http://192.168.1.34:5000");
+    const local = document.getElementById("local");
+    const remote = document.getElementById("remote");
+    const you = document.getElementById("you");
+    const partner = document.getElementById("partner");
+
+    let localStream;
+    let peer;
+    let myId;
+    let partnerId;
+
+    socket.on("connect", () => {
+      myId = socket.id;
+      console.log("Connected with ID:", myId);
+    });
+
+    function joinRoom() {
+      const room = document.getElementById("room").value;
+      socket.emit("join", { room });
+      setup();
+    }
+
+    async function setup() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        local.srcObject = localStream;
+      } catch (err) {
+        alert("Camera access failed: " + err.message);
+        console.error("Camera error:", err);
+        return;
+      }
+
+      peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+
+      localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+
+      peer.ontrack = e => {
+        console.log("Received remote track");
+        remote.srcObject = e.streams[0];
+      };
+
+      peer.onicecandidate = e => {
+        if (e.candidate && partnerId) {
+          console.log("Sending ICE candidate");
+          socket.emit("signal", {
+            to: partnerId,
+            from: myId,
+            candidate: e.candidate
+          });
+        }
+      };
+
+      socket.on("joined", async ({ id }) => {
+        console.log("Joined with partner:", id);
+        partnerId = id;
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        socket.emit("signal", {
+          to: partnerId,
+          from: myId,
+          offer
+        });
+      });
+
+      socket.on("signal", async data => {
+        console.log("Signal received:", data);
+        if (data.offer) {
+          await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const answer = await peer.createAnswer();
+          await peer.setLocalDescription(answer);
+          partnerId = data.from;
+          socket.emit("signal", {
+            to: partnerId,
+            from: myId,
+            answer
+          });
+        } else if (data.answer) {
+          await peer.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } else if (data.candidate) {
+          try {
+            await peer.addIceCandidate(data.candidate);
+          } catch (err) {
+            console.error("Error adding ICE candidate", err);
+          }
+        }
+      });
+
+      setInterval(sendPrediction, 1500);
+    }
+
+    async function sendPrediction() {
+      if (!localStream) return;
+      const track = localStream.getVideoTracks()[0];
+      const cap = new ImageCapture(track);
+      try {
+        const frame = await cap.grabFrame();
+        const canvas = document.createElement("canvas");
+        canvas.width = frame.width;
+        canvas.height = frame.height;
+        canvas.getContext("2d").drawImage(frame, 0, 0);
+        canvas.toBlob(async blob => {
+          const form = new FormData();
+          form.append("file", blob, "frame.jpg");
+          const res = await fetch("http://192.168.1.34:8000/predict/", { method: "POST", body: form });
+          const data = await res.json();
+          const message = data.reply && data.reply !== "..." ? `${data.prediction} → ${data.reply}` : data.prediction;
+          you.textContent = `🧍 You: ${message}`;
+          if (data.reply && data.reply !== "...") {
+            const utter = new SpeechSynthesisUtterance(data.reply);
+            speechSynthesis.speak(utter);
+          }
+        }, "image/jpeg");
+      } catch (e) {
+        console.warn("Prediction failed:", e);
+      }
+    }
+  </script>
+</body>
+</html>

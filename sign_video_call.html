@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Sign Translator Video Call</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #0f0f1f;
+      color: white;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    video {
+      width: 45%;
+      margin: 10px;
+      border: 3px solid #00c3ff;
+      border-radius: 10px;
+    }
+    .subtitles {
+      font-size: 1.2rem;
+      color: #00ffae;
+      margin-top: 15px;
+    }
+    .btn {
+      background-color: #007acc;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      margin-top: 15px;
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>📞 Sign Language Video Call</h1>
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <div class="subtitles" id="localSubtitle">🧍 You: ...</div>
+  <div class="subtitles" id="remoteSubtitle">👤 Partner: ...</div>
+  <button class="btn" onclick="startCall()">Start Call</button>
+
+  <script>
+    let localStream;
+    let peerConnection;
+    const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const localSubtitle = document.getElementById('localSubtitle');
+    const remoteSubtitle = document.getElementById('remoteSubtitle');
+
+    async function startCall() {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      localVideo.srcObject = localStream;
+
+      // Prediction loop
+      setInterval(captureAndPredict, 1200);
+
+      // WebRTC Connection (simplified for localhost testing)
+      peerConnection = new RTCPeerConnection(servers);
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+      peerConnection.ontrack = event => {
+        remoteVideo.srcObject = event.streams[0];
+      };
+
+      peerConnection.onicecandidate = e => {
+        if (e.candidate) console.log('ICE candidate:', e.candidate);
+      };
+
+      // Simulated offer/answer between peers (loopback)
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      const tempPC = new RTCPeerConnection(servers);
+      tempPC.ontrack = e => remoteVideo.srcObject = e.streams[0];
+      tempPC.onicecandidate = e => {
+        if (e.candidate) console.log('Temp ICE:', e.candidate);
+      };
+      tempPC.ondatachannel = e => {};
+      localStream.getTracks().forEach(track => tempPC.addTrack(track, localStream));
+      await tempPC.setRemoteDescription(offer);
+      const answer = await tempPC.createAnswer();
+      await tempPC.setLocalDescription(answer);
+      await peerConnection.setRemoteDescription(answer);
+    }
+
+    async function captureAndPredict() {
+      if (!localStream) return;
+
+      const videoTrack = localStream.getVideoTracks()[0];
+      const imageCapture = new ImageCapture(videoTrack);
+
+      try {
+        const bitmap = await imageCapture.grabFrame();
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+
+        canvas.toBlob(async (blob) => {
+          const formData = new FormData();
+          formData.append("file", blob, "frame.jpg");
+          const response = await fetch("http://127.0.0.1:8000/predict/", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await response.json();
+          const message = data.reply && data.reply !== "..." ? `${data.prediction} → ${data.reply}` : data.prediction;
+          localSubtitle.textContent = `🧍 You: ${message}`;
+        }, "image/jpeg");
+      } catch (e) {
+        console.warn("Prediction error:", e);
+      }
+    }
+  </script>
+</body>
+</html>

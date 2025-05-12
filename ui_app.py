@@ -6,6 +6,8 @@ import threading
 import joblib
 import os
 import mss
+import tkinter.ttk as ttk 
+import pyttsx3
 
 # Load model and reply dictionary
 model = joblib.load("sign_model.joblib")
@@ -30,7 +32,6 @@ def extract_landmarks(hand_landmarks):
 
 
 # Predict from a given frame
-# Predict from a given frame
 def predict_frame(frame):
     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(image)
@@ -38,38 +39,23 @@ def predict_frame(frame):
     prediction = "None"
     reply = None
 
-    # Define replies only for specific word signs
-    signs_with_replies = {
-        "Hello": "Hi!",
-        "Help": "Do you need help?",
-        "Yes": "Alright!",
-        "No": "No problem",
-        "Thank You":"You're Welcome",
-        "I Love You": "Love you too",
-        "OK/Okay": "Okay!",
-        "Peace/Victory": "Peace!",
-        "STR": "ATMEN",
-    }
-
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
             landmarks = extract_landmarks(hand_landmarks)
             if landmarks.shape[0] == 42:
-                predicted_id = model.predict([landmarks])[0]
-                prediction = reply_dict.get(predicted_id, "Unknown")
-
-                reply = signs_with_replies.get(prediction, None)
+                prediction = model.predict([landmarks])[0]
+                reply = reply_dict.get(prediction, "...")
 
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                cv2.putText(frame, f'{prediction}' + (f' -> {reply}' if reply else ''),
-                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                if reply:
+                    cv2.putText(frame, f'{reply}', (10, 60),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
 
     else:
         cv2.putText(frame, "No Hand Detected", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 
     return prediction, reply
-
 
 
 # Webcam recognition
@@ -164,18 +150,69 @@ def start_screen_capture():
 
 # GUI
 def create_ui():
+    tts_engine = pyttsx3.init()
+
     root = tk.Tk()
-    root.title("Sign Recognition Interface")
-    root.geometry("300x200")
+    root.title("Sign Language Translator")
+    root.geometry("420x380")
+    root.configure(bg="#e9f0f7")  # Light blue-gray background
 
-    webcam_btn = tk.Button(root, text="Start Webcam + Gesture", command=recognize)
-    webcam_btn.pack(pady=10)
+    # Custom style
+    style = ttk.Style()
+    style.theme_use("clam")
 
-    screen_btn = tk.Button(root, text="Start Screen Capture + Gesture", command=start_screen_capture)
-    screen_btn.pack(pady=10)
+    style.configure("TButton",
+                    font=("Segoe UI", 10, "bold"),
+                    padding=6,
+                    foreground="white",
+                    background="#007acc")
+    style.map("TButton",
+              background=[('active', '#005f99')])
 
-    quit_btn = tk.Button(root, text="Exit", command=root.quit, width=25)
-    quit_btn.pack(pady=10)
+    style.configure("TLabelframe",
+                    background="#e9f0f7",
+                    foreground="#003366",
+                    font=("Segoe UI", 11, "bold"))
+
+    style.configure("TLabel",
+                    background="#e9f0f7",
+                    foreground="#333")
+
+    # Title
+    title_label = tk.Label(root, text="Sign Language Translator",
+                           font=("Segoe UI", 16, "bold"),
+                           bg="#e9f0f7", fg="#003366")
+    title_label.pack(pady=15)
+
+    # Gesture Recognition Section
+    gesture_frame = ttk.LabelFrame(root, text="Gesture Recognition")
+    gesture_frame.pack(padx=20, pady=10, fill="x")
+
+    webcam_btn = ttk.Button(gesture_frame, text="Start Webcam + Gesture", command=recognize)
+    webcam_btn.pack(pady=5, padx=20, fill="x")
+
+    screen_btn = ttk.Button(gesture_frame, text="Start Screen Capture + Gesture", command=start_screen_capture)
+    screen_btn.pack(pady=5, padx=20, fill="x")
+
+    # Text-to-Speech Section
+    tts_frame = ttk.LabelFrame(root, text="Text-to-Speech")
+    tts_frame.pack(padx=20, pady=10, fill="x")
+
+    tts_entry = tk.Entry(tts_frame, font=("Segoe UI", 10), width=40, bg="#ffffff", fg="#000")
+    tts_entry.pack(pady=5, padx=10)
+
+    def play_text():
+        text = tts_entry.get()
+        if text.strip():
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+
+    play_btn = ttk.Button(tts_frame, text="Play Text", command=play_text)
+    play_btn.pack(pady=5, padx=20, fill="x")
+
+    # Exit Button
+    quit_btn = ttk.Button(root, text="Exit", command=root.quit)
+    quit_btn.pack(pady=20, fill="x", padx=60)
 
     root.mainloop()
 

@@ -1,0 +1,9 @@
+tkinter 
+cv2
+numpy 
+mediapipe
+threading
+joblib
+os
+mss
+pyttsx3
