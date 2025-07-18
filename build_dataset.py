@@ -12,7 +12,7 @@ mp_draw = mp.solutions.drawing_utils
 cap = cv2.VideoCapture(0)
 
 # Create/Open CSV file to save data
-csv_file = open('hand_signs_data.csv', mode='a', newline='')
+csv_file = open('hand_signs_data_cleaned.csv', mode='a', newline='')
 csv_writer = csv.writer(csv_file)
 
 # Ask user for the label (sign name)

@@ -5,7 +5,7 @@ from sklearn.metrics import classification_report
 import joblib
 
 # Load dataset
-data = pd.read_csv('hand_signs_data.csv')  # adjust path if needed
+data = pd.read_csv('hand_signs_data_cleaned.csv')  # adjust path if needed
 
 # Rename the last column to 'label'
 data.columns.values[-1] = 'label'

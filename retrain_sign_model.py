@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 import joblib
 
 # === CONFIGURATION ===
-DATASET_PATH = "hand_signs_data.csv"
+DATASET_PATH = "hand_signs_data_cleaned.csv"
 MODEL_PATH = "sign_model.joblib"
 REPLY_DICT_PATH = "reply_dict.joblib"
 
